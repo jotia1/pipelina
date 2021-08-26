@@ -5,12 +5,14 @@ import paramiko
 import os
 import time
 from pprint import pprint
-import datetime, timedelta
+import datetime
 import logging
+import sys
 
 HPCHOSTNAME='awoonga.qriscloud.org.au'
 USERNAME="uqjarno4"
 VERBOSE=True
+FISH='fish'
 
 ## Each fish should produce 7 output files + a plane folder per plane
 ## F.npy, iscell.npy, Fneu.npy, spks.npy, ops.npy, stat.npy, Fall.npy, plane0
@@ -61,15 +63,22 @@ class Fish:
 
 def main():
 
-    logging.basicConfig(filename='zfish_log.log', level=logging.INFO)
+    if len(sys.argv) != 5:
+        print('Program expects exactly 4 arguments, exiting.')
+        print('Should be folder containing folders with tifs, output location, fps and logname.')
+        print('e.g. python3 zfishcommand.py /QRISdata/Q2396/SPIM_120170/Spontaneous /QRISdata/Q4008/zfish_s2p_output 2 logname')
+        return
+
+    logging.basicConfig(filename=f'{sys.argv[4]}.log', level=logging.INFO)
 
     ## Once finished this will come from cmd line or somewhere else
-    input_fish_folder = '/QRISdata/Q2396/SPIM_120170/Spontaneous'
-    root_output_folder = '/QRISdata/Q4008/zfish_s2p_output'
-    fps = 2
+    input_fish_folder = sys.argv[1]     #'/QRISdata/Q2396/SPIM_120170/Spontaneous'
+    root_output_folder = sys.argv[2]    #'/QRISdata/Q4008/zfish_s2p_output'
+    fps = sys.argv[3]
 
     logging.info('Started zfish command')
     logging.info(f'Time now: {get_current_time()}')
+    logging.info(f'Supplied args: {sys.argv}')
 
     ssh = get_ssh_connection()
 
@@ -79,10 +88,13 @@ def main():
     # ls results end in \n, need to strip away
     all_fish = [filename.strip() for filename in all_fish]
 
+    ## TODO : Hack for MECP2, select only 8-11 to compare to other jobs I am running
+    all_fish = [fish for fish in all_fish if int(fish.split('fish')[1].split('_')[0]) > 7]
+
     ## Good fish indexes
     # Only test on the good fish NOTE: Already offset by -1
-    good_fish_idxs = [4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 19, 20, 22, 23, 25, 26, 27, 28, 29]
-    all_fish = [all_fish[idx] for idx in good_fish_idxs]
+    #good_fish_idxs = [4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 18, 19, 20, 22, 23, 25, 26, 27, 28, 29]
+    #all_fish = [all_fish[idx] for idx in good_fish_idxs]
 
     ## TODO : remove, for testing only use a few fish
     #all_fish = all_fish[4:7]
@@ -143,6 +155,7 @@ def start_fish_job(ssh, fish):
 
     launch_job = f'python ~/pipelina/HPC_run_fish.py {fish.get_absolute_path()} {fish.root_output_folder} {fish.fps}'
     #print(f'Launch job: {launch_job}')
+    #return
 
     # Actually send job to awoonga
     stdin, stdout, stderr = ssh.exec_command(launch_job)
