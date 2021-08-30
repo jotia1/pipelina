@@ -9,10 +9,11 @@ import logging
 import sys
 
 HPCHOSTNAME='awoonga.qriscloud.org.au'
-USERNAME="uqjarno4"
+USERNAME=os.getenv('UQUSERNAME')
 VERBOSE=True
 SLICE='slice'
 FISH='fish'
+JOBIDEXTENSION='[].awon'
 
 ## Each fish should produce 7 output files + a plane folder per plane
 ## F.npy, iscell.npy, Fneu.npy, spks.npy, ops.npy, stat.npy, Fall.npy, plane0
@@ -26,11 +27,10 @@ FPS2PLANES = {
 }
 
 WAITTIME = 6 * 60 * 60
-
+#WAITTIME = 45
 
 def get_current_time():
-    # Add +10 for Brisbane time
-    return datetime.datetime.now() + datetime.timedelta(hours=10)
+    return datetime.datetime.now()
 
 
 
@@ -68,8 +68,12 @@ def main():
     remove_finished_slices(ssh, incomplete_slices, root_output_folder)
     
     ## Then start an array for all incomplete slices
-    array_job_ids.append(start_slice_array(ssh, incomplete_slices, root_output_folder, fps, exp_name))
-    logging.info('Array job started, now monitor')
+    initial_id = start_slice_array(ssh, incomplete_slices, root_output_folder, fps, exp_name)
+    if not initial_id:
+        logging.warn("Failed to get an intial array id, quiting.")
+        return
+    array_job_ids.append(initial_id)
+    logging.info(f'Array job started, now monitor {initial_id}')
 
     # Now monitor the jobs until done
     finished_slices = []
@@ -82,6 +86,7 @@ def main():
 
         running_jobs = get_current_jobs(ssh)
 
+        print(array_job_ids, 'Running: ', running_jobs)
         if array_job_ids[-1] in running_jobs:  # Array is still running, check back later
             logging.info(f'Array still running, jobid: {array_job_ids[-1]} is running, skip')
             continue  # wait time and check again
@@ -162,13 +167,15 @@ def start_slice_array(ssh, incomplete_slices, output_folder, fps, exp_name):
     else:
         # There was nothing on stderr, so seems good, try and get the jobid
         output = stdout.readlines()[0]
-        #print(f'------ OUTPUT for sending job command: {output}')
-        jobid = output.split('[].')[0]
-        if '[].awonmgr' in output and jobid.isdigit():
+        print(f'------ OUTPUT for sending job command: {output}')
+        jobid = output.split(JOBIDEXTENSION)[0]
+        print(jobid)
+        if JOBIDEXTENSION in output and jobid.isdigit():
             logging.info(f"ArrayID: {jobid}")
             return jobid
         else:
             logging.warning(f'-------- Issue with Jobid parsing \n -------- Got output: {output}')
+            return None
 
     return None # failed to get job_id
     
@@ -176,6 +183,7 @@ def start_slice_array(ssh, incomplete_slices, output_folder, fps, exp_name):
 
 
 def start_slice_job(ssh, fish):
+    raise NotImplementedError
 
     launch_job = f'python ~/pipelina/HPC_run_slice.py {fish.get_absolute_path()} {fish.root_output_folder} {fish.fps}'
     print(f'Launch job: {launch_job}')
@@ -194,7 +202,7 @@ def start_slice_job(ssh, fish):
         output = stdout.readlines()[0]
         print(f'------ OUTPUT for sending job command: {output}')
         jobid = output.split('.')[0]
-        if '.awonmgr' in output and jobid.isdigit():
+        if JOBIDEXTENSION in output and jobid.isdigit():
             logging.info(f"JobID: {jobid} for fish: {fish.base_fish_folder}")
             fish.add_jobid(jobid)
             return jobid
@@ -209,10 +217,12 @@ def get_current_jobs(ssh):
 
     running_jobs = []
     for line in stdout.readlines():
-        if '[].awonmgr2' in line:
-            jobid = line.split('.awonmgr2')[0]
+        print('line: ', line)
+        if JOBIDEXTENSION in line:
+            jobid = line.split(JOBIDEXTENSION)[0]
             running_jobs.append(jobid)
     
+    print('all found jobs:', running_jobs)
     return running_jobs
 
 def run_command(ssh, command):

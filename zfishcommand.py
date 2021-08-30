@@ -74,7 +74,9 @@ def main():
     ## Once finished this will come from cmd line or somewhere else
     input_fish_folder = sys.argv[1]     #'/QRISdata/Q2396/SPIM_120170/Spontaneous'
     root_output_folder = sys.argv[2]    #'/QRISdata/Q4008/zfish_s2p_output'
-    fps = sys.argv[3]
+    fps = int(sys.argv[3])
+    nplanes = sys.argv[4]
+    gcamp_type = sys.argv[5]
 
     logging.info('Started zfish command')
     logging.info(f'Time now: {get_current_time()}')
@@ -89,7 +91,8 @@ def main():
     all_fish = [filename.strip() for filename in all_fish]
 
     ## TODO : Hack for MECP2, select only 8-11 to compare to other jobs I am running
-    all_fish = [fish for fish in all_fish if int(fish.split('fish')[1].split('_')[0]) > 7]
+    logging.info('Doing MECP2 hack to only get fish 8-11')
+    all_fish = [fish for fish in all_fish if ((int(fish.split('fish')[1].split('_')[0]) > 7) and (int(fish.split('fish')[1].split('_')[0]) < 12))]
 
     ## Good fish indexes
     # Only test on the good fish NOTE: Already offset by -1
@@ -107,7 +110,7 @@ def main():
         fish = Fish(base_fish_folder, input_fish_folder, fps, root_output_folder)
         incomplete_fish.append(fish) # Build list of fish left to compute for
 
-        start_fish_job(ssh, fish)
+        start_fish_job(ssh, fish, nplanes, gcamp_type)
     
     logging.info('Jobs started, now monitor')
 
@@ -138,7 +141,7 @@ def main():
             logging.info('Restarting fish')
 
             ## restart fish
-            jobid = start_fish_job(ssh, fish)
+            jobid = start_fish_job(ssh, fish, nplanes, gcamp_type)
             if not jobid:
                 logging.warning('Error starting fish, could not get jobid')
 
@@ -151,10 +154,10 @@ def main():
 
 
 
-def start_fish_job(ssh, fish):
+def start_fish_job(ssh, fish, nplanes, gcamp_type):
 
-    launch_job = f'python ~/pipelina/HPC_run_fish.py {fish.get_absolute_path()} {fish.root_output_folder} {fish.fps}'
-    #print(f'Launch job: {launch_job}')
+    launch_job = f'python ~/pipelina/HPC_run_fish.py {fish.get_absolute_path()} {fish.root_output_folder} {fish.fps} {nplanes} {gcamp_type}'
+    logging.info(f'Launch job: {launch_job}')
     #return
 
     # Actually send job to awoonga
@@ -209,6 +212,7 @@ def fish_finished_computing(ssh, fish):
     num_files_found = len(find_result)
 
     nplanes = FPS2PLANES.get(fish.fps)
+    logging.info(f'Check fish fps: {fish.fps} ({type(fish.fps)}), nplanes = {nplanes}')
     total_files_expected = (nplanes * FILESPERFISH) + 1 # +1 for the original directory
     
     logging.info(f'Checking if fish is finished, expected number files: {total_files_expected}, found: {num_files_found}')
