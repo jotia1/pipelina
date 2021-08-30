@@ -24,6 +24,12 @@ And now lets make sure those are used correctly, again copying this line into th
 ```
 source ~/.bashrc
 ```
+Check these are correct using 
+```
+echo $UQUSERNAME
+echo $UQSCHOOL
+```
+These should print your correct username and school string.
 
 ### Install miniconda
 **NOTE**: Skip miniconda installation for now, instead just try `module load anaconda` # TODO : Check what is best for conda on awoonga.
