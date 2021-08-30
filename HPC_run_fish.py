@@ -7,10 +7,16 @@ import sys
 import glob
 import os
 
+nplanes = 50
+gcamp_type = 'gcamp6s'
+if len(sys.argv) == 6:
+    nplanes = int(sys.argv[4])
+    gcamp_type = sys.argv[5]
 
-if len(sys.argv) != 4:
-    print("Missing required arguments. Should be <fish_folder> <output_folder> <fps>")
-    print("Example: python HPC_run_fish.py /QRISdata/Q2396/SPIM120170/Spontaneous /QRISdata/Q4008/zfish_s2p_output/ 2")
+
+if len(sys.argv) < 4:
+    print("Missing required arguments. Should be <fish_folder> <output_folder> <fps> <nplanes> <gcamp_type>")
+    print("Example: python HPC_run_fish.py /QRISdata/Q2396/SPIM120170/Spontaneous /QRISdata/Q4008/zfish_s2p_output/ 2 50 gcamp6s")
     exit()
 print("Args:", sys.argv)
 
@@ -40,7 +46,7 @@ for fish_tif in `ls {fish_folder}/*.tif`; do
     /usr/local/bin/recall_medici $fish_tif
 done
 
-python ~/pipelina/run_fish.py {fish_folder} {output_folder} {fps}
+python ~/pipelina/run_fish.py {fish_folder} {output_folder} {fps} {nplanes} {gcamp_type}
 """
 
 

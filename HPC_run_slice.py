@@ -1,5 +1,5 @@
 """ HPC_run_slice.py
-Build the pbs script for running a single fish 
+Build the pbs script for running a slice array
 
 """
 from subprocess import call
@@ -9,36 +9,44 @@ import os
 
 
 if len(sys.argv) != 4:
-    print("Missing required arguments. Should be <slice_folder> <output_folder> <fps>")
-    print("Example: python HPC_run_slice.py /QRISdata/Q2396/SPIM120170/Spontaneous/slice0 /QRISdata/Q4008/zfish_s2p_slice_output/ 2")
+    print("Missing required arguments. Should be <incomplete_slices_filename> <output_folder> <fps>")
+    print("Example: python HPC_run_slice.py slices_filename /QRISdata/Q4008/zfish_s2p_slice_output 2")
     exit()
 print("Args:", sys.argv)
 
-slice_folder = os.path.normpath(sys.argv[1])
+slice_filename = os.path.normpath(sys.argv[1])
 output_folder = os.path.normpath(sys.argv[2])
 fps = sys.argv[3]
+# Filename will be in format f'incomplete_slices_{exp_name}.txt'
+expname = slice_filename.split('_')[2].strip('.txt')
 
 ## Define variables needed for file
-users_school = 'UQ-EAIT-ITEE' # likely UQ-QBI or UQ-SCI-SBMS
+users_school = os.getenv('UQSCHOOL') #'UQ-EAIT-ITEE' # likely UQ-QBI or UQ-SCI-SBMS
+
+with open(slice_filename, 'r') as f:
+    num_files = len(f.readlines())
 
 ## Build pbs script 
 file_contents = f"""#!/bin/bash
-#PBS -N s2p_slice
+#PBS -N {expname}
 #PBS -A {users_school}
 #PBS -l select=1:ncpus=12:mem=110GB:vmem=110GB
-#PBS -l walltime=12:00:00
+#PBS -l walltime=05:00:00
 #PBS -j oe
 #PBS -k doe
+#PBS -J 1-{num_files}
 
 
 module load anaconda
 source activate suite2p
 
-for fish_tif in `ls {slice_folder}/*.tif`; do
-    /usr/local/bin/recall_medici $fish_tif
-done
+single_slice=`cat {slice_filename} | head -n ${{PBS_ARRAY_INDEX}} | tail -n 1`
 
-python ~/pipelina/run_fish.py {slice_folder} {output_folder} {fps}
+echo $single_slice
+
+/usr/local/bin/recall_medici $single_slice
+
+python ~/pipelina/suite2p_extract_CNS.py $single_slice {output_folder} {fps}
 """
 
 
