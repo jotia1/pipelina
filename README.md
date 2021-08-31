@@ -104,7 +104,7 @@ You will need a few bits of information before you can run pipelina:
 - `OUTPUTFOLDER="path/where/s2p/output/should/save"` - The folder in which the finished fish will be saved
 - `FPS="2"` - The frame rate used in the recording
 - `NPLANES="50"` - The number of planes used
-- `GCAMPTYPE="gcamp6f"` - The gcamp version used, must be one of [gcamp6s, gcamp6f]
+- `GCAMPTYPE="gcamp6f"` - The gcamp version used, must be one of [gcamp6s, gcamp6f] using tau values of 1.4 and 0.7 respectively.
 
 You can set all of these values in the file called `run_zfishcommand.sh`. To open the file we can use the nano text editor, when you are done you can save by pressng Ctrl+o and then enter. To exit press Ctrl+x.
 ```
