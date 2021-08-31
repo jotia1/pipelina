@@ -7,7 +7,7 @@ Pipelina is a pipeline for automating as many steps as possible in processing ca
 The pipeline is controlled by an external server (the command server) which launches jobs on Awoonga and periodically checks on them. To access the server you will need to be added, give your uq staff id (or student number) to Josh who will add you.
 
 ## Get an Awoonga account
-Follow instructions here (https://rcc.uq.edu.au/awoonga)[https://rcc.uq.edu.au/awoonga]. You may be required to undergo HPC training run by RCC
+Follow instructions here [https://rcc.uq.edu.au/awoonga](https://rcc.uq.edu.au/awoonga). You may be required to undergo HPC training run by RCC
 
 ## Set up pipelina on Awoonga
 Now we will need to set up pipelina on Awoonga. First log into Awoonga using PuTTY, into the field asking for Host name type the address:
