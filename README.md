@@ -32,7 +32,8 @@ echo $UQSCHOOL
 These should print your correct username and school string.
 
 ### Install miniconda
-**NOTE**: Skip miniconda installation for now, instead just try `module load anaconda` # TODO : Check what is best for conda on awoonga.
+**NOTE**: Skip miniconda installation for now, I think we may be able to use the awoonga pre-installed anaconda environment but I will need a fresh user account to test this (the next step contains what I **think** will work i.e. `module load anaconda` which should save us having to install our own copy. 
+
 Anaconda is helpful for managing Python enviroments and packages, we will install Miniconda which is a barebones version. While still logged into Awoonga over ssh (through PuTTY) enter the following commands one by one, when prompted agree to the terms, conditions and installation location:
 ```
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
@@ -47,9 +48,10 @@ We will need to download the code for [Suite2p](https://github.com/MouseLand/sui
 cd ~/
 git clone https://github.com/MouseLand/suite2p.git
 ```
-Now lets go into the Suite2p folder and actually set up the Anaconda environment
+Now lets go into the Suite2p folder and actually set up the Anaconda environment, agree to the installation instructions and default locations
 ```
 cd suite2p
+module load anaconda
 conda env create -f environment.yml
 ```
 To Activate and use the suite2p environment you can use the command
