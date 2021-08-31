@@ -126,7 +126,7 @@ To check the logs (which tell us what the program is doing / did) we need to kno
 ```
 cat descriptive-name.log
 ``` 
-which will just paste the whole log to the screen, alternatively you could use `nano` to open the file directly or filezilla to copy the log onto your own local computer and then open it with any text editor.
+which will just paste the whole log to the screen, alternatively you could use `nano` to open the file directly or filezilla to copy the log onto your own local computer and then open it with any text editor. Similarly, for each job launched a `descriptive-name.txt` file is also created which has a record the information used to launch the job (the input folder, fps, nplanes, etc.). 
 
 
 
