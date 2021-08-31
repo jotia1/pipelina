@@ -100,8 +100,8 @@ cd pipelina
 
 You will need a few bits of information before you can run pipelina: 
 - `JOBNAME="descriptive-name"` - A short descriptive name for the job, can be anything but its important it is unique to any other running jobs e.g. `fish8-11Spont`
-- `INPUTFOLDER="/path/to/folder/with/multiple/fish"` - The folder in which the fish folders to process are
-- `OUTPUTFOLDER="path/where/s2p/output/should/save"` - The folder in which the finished fish will be saved
+- `INPUTFOLDER="/path/to/folder/with/multiple/fish/folders"` - The folder in which the fish folders to process are
+- `OUTPUTFOLDER="/path/where/s2p/output/should/save"` - The folder in which the finished fish will be saved
 - `FPS="2"` - The frame rate used in the recording
 - `NPLANES="50"` - The number of planes used
 - `GCAMPTYPE="gcamp6f"` - The gcamp version used, must be one of [gcamp6s, gcamp6f] using tau values of 1.4 and 0.7 respectively.
