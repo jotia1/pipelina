@@ -1,7 +1,6 @@
 """ Revised zfish command script which should be more flexible for both suite2p
     and ANTs jobs plus additional 'HPCJobs' that may be needed to process data
 """
-from zfishcommand import FILESPERFISH
 import paramiko
 import os
 import time
@@ -112,8 +111,8 @@ def create_whole_fish_s2p_jobs(ssh, input_folder, output_folder, s2p_config_json
     all_fish = [filename.strip() for filename in all_fish]
     input_folder = os.path.normpath(input_folder)
 
-    # TODO : debugging, remove
-    all_fish = all_fish[:3]
+    # TODO : hack to only process some of q2396 fish (just grab some)
+    all_fish = all_fish[4:10]
 
     fish_jobs = []
     for fish_base_name in all_fish:
@@ -251,7 +250,7 @@ class FullFishs2p(HPCJob):
                 logging.warning(f'Failed to read s2p config file: {self.s2p_config_json}')
 
     def start_job(self):
-        launch_job = f'python ~/pipelina/revised_HPC_run_fish.py {self.fish_abs_path} {self.output_folder} {self.s2p_config_json}'
+        launch_job = f'python ~/pipelina/pipelina_HPC_run_fish.py {self.fish_abs_path} {self.output_folder} {self.s2p_config_json}'
         logging.info(f'ssh exec: {launch_job}')
 
         # actually launch job
