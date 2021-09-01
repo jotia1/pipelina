@@ -9,10 +9,11 @@ import logging
 import argparse
 import json
 import shutil
+import datetime
 
 # How long to wait before checking on running jobs
 WAITTIME = 6 * 60 * 60
-WAITTIME = 120
+#WAITTIME = 120
 # HPC ssh address to use
 HPCHOSTNAME='awoonga.qriscloud.org.au'
 # HPC user account to use, set as environment variable
@@ -45,28 +46,23 @@ def main():
         # TODO
         logging.info('TODO : verify args')
 
-        ## Create an experiment specific copy of s2p_ops 
-        exp_s2p_filename = f'{args.name}_{os.path.basename(args.s2p_config_json)}'
-        shutil.copy2(args.s2p_config_json, exp_s2p_filename)
-
-        ## move to server
-        ftp_client = ssh.open_sftp()
-        ftp_client.put(exp_s2p_filename, exp_s2p_filename)
-        logging.info(f"Sent {exp_s2p_filename} to server.")
+        # Send s2p args to server and get the filename used
+        exp_s2p_filename = transfer_s2p_args(ssh, args.name, args.s2p_config_json)
 
         ## Create all jobs
         incomplete_jobs = create_whole_fish_s2p_jobs(ssh, args.input_folder, args.output_folder, exp_s2p_filename)
         
     if args.job_type == 'fish-slices':
-        print('Not yet supported. Exiting')
-        raise NotImplementedError()
-
+        # Send s2p args to server and get the filename used
+        exp_s2p_filename = transfer_s2p_args(ssh, args.name, args.s2p_config_json)
+        incomplete_jobs = [SlicedFishs2p(ssh, args.input_folder, args.output_folder, exp_s2p_filename, args.name)]
 
     ## Main loop
     while incomplete_jobs:
 
         ## Get a list of currently running jobs
         running_jobs = get_current_jobs(ssh)
+        logging.info(f'Check on job states: {datetime.datetime.now()}')
 
         finished_jobs = []
         ## for each incomplete job
@@ -74,11 +70,13 @@ def main():
 
             ## if job is still running, skip for now
             if job.get_latest_job_id() in running_jobs:
+                logging.info(f'Still running, skip {job}')
                 continue
 
             # if not running and meets finished criteria, prepare to remove          
             if job.is_finished():
                 finished_jobs.append(job)
+                logging.info(f'Job finished: {job}')
                 continue
 
             # else, not running and not finished, so restart
@@ -90,6 +88,17 @@ def main():
         ## Wait some time before checking again
         time.sleep(WAITTIME)    
 
+
+def transfer_s2p_args(ssh, exp_name, s2p_config_json):
+        ## Create an experiment specific copy of s2p_ops 
+        exp_s2p_filename = f'{exp_name}_{os.path.basename(s2p_config_json)}'
+        shutil.copy2(s2p_config_json, exp_s2p_filename)
+
+        ## move to server
+        ftp_client = ssh.open_sftp()
+        ftp_client.put(exp_s2p_filename, exp_s2p_filename)
+        logging.info(f"Sent {exp_s2p_filename} to server.")
+        return exp_s2p_filename
 
 def create_whole_fish_s2p_jobs(ssh, input_folder, output_folder, s2p_config_json):
     """ Create suite2p whole fish jobs for the cluster given the ssh connection
@@ -112,7 +121,7 @@ def create_whole_fish_s2p_jobs(ssh, input_folder, output_folder, s2p_config_json
     input_folder = os.path.normpath(input_folder)
 
     # TODO : hack to only process some of q2396 fish (just grab some)
-    all_fish = all_fish[4:10]
+    all_fish = all_fish[18:25]
 
     fish_jobs = []
     for fish_base_name in all_fish:
@@ -309,7 +318,8 @@ class SlicedFishs2p(HPCJob):
     """ Run a sliced fish through suite2p using arguments from specified config
         file 
     """
-    def __init__(self, ssh, slice_folder, output_folder, s2p_config_json):
+    FILESPERSLICE = 8
+    def __init__(self, ssh, slice_folder, output_folder, s2p_config_json, exp_name):
         """ 
         Args:
             ssh: An open ssh connection
@@ -323,12 +333,94 @@ class SlicedFishs2p(HPCJob):
         self.slice_folder = slice_folder
         self.output_folder = output_folder
         self.s2p_config_json = s2p_config_json
+        self.exp_name = exp_name
+
+        ## Set up a list of slices to do
+        ## Get a list of all slices
+        ls_slice = f'ls {self.slice_folder}'
+        logging.info(f'ssh exec: {ls_slice}')
+        self.all_slices = run_command(ssh, ls_slice)
+        # ls results end in \n, need to strip away
+        self.all_slices = [filename.strip() for filename in self.all_slices]
+        # Make paths absolute
+        self.all_slices = [os.path.join(self.slice_folder, slice_name) for slice_name in self.all_slices]
+        self.incomplete_slices = self.all_slices.copy()
+
+        self.remove_finished_slices()
+
+    def remove_finished_slices(self):
+        logging.info('remove_finished_slices')
+        # use the find command to get all files in output_folder
+        find_command = f'find {self.output_folder}'
+        logging.info(f'ssh exec: {find_command}')
+        stdin, stdout, stderr = self.ssh.exec_command(find_command)
+        find_result = stdout.readlines()
+        logging.debug(f'find_result: {find_result}')
+
+        ## Count how many files exist for each slice
+        counts = [0 for _ in range(len(self.incomplete_slices))]
+        for filename in find_result:
+            for i, slice in enumerate(self.incomplete_slices):
+                if slice in filename:
+                    counts[i] += 1
+                    break
+
+        logging.info(f'counts result: {counts}')
+            
+        # Any incomplete slices with the expected number of files are now complete
+        finished_slices = []
+        for i, count in enumerate(counts):
+            if count == self.FILESPERSLICE:
+                finished_slices.append(self.incomplete_slices[i])
+
+        # Now actually remove finished slices from incomplete list
+        for slice in finished_slices:
+            self.incomplete_slices.remove(slice)
+            logging.info(f'Finished and removing slice: {slice}')
+        
+        logging.info(f'Finished slices removed, {len(self.incomplete_slices)} left.')
+
 
     def start_job(self):
-        pass
+        ## Create a list of slices to do
+        contents = '\n'.join(self.incomplete_slices)
+        incomplete_slices_filename = f'incomplete_slices_{self.exp_name}.txt'
+        with open(incomplete_slices_filename, 'w') as f:
+            f.write(contents)
+
+        ## Send over to cluster
+        ftp_client = self.ssh.open_sftp()
+        ftp_client.put(incomplete_slices_filename, incomplete_slices_filename)
+
+        ## Launch and check array
+        launch_job = f'python ~/pipelina/pipelina_HPC_run_slice.py {incomplete_slices_filename} {self.output_folder} {self.s2p_config_json}'
+        logging.info(f'ssh exec: {launch_job}')
+        # Actually send job to awoonga
+        stdin, stdout, stderr = self.ssh.exec_command(launch_job)
+
+        # Did launching the job cause error output
+        any_errors = stderr.readlines()
+        if any_errors:
+            logging.warning(f'Error when starting fish: {any_errors}')
+            return None
+        
+        # Try to parse job id
+        output = stdout.readlines()[0]
+        job_id = parse_job_id(output)
+
+        ## Failed parse job id
+        if not job_id:
+            logging.warning(f'Failed to get job id.')
+            return None
+
+        self.job_ids.append(job_id)
+        logging.info(f'Successfully launched: {self}')
+        return job_id
 
     def is_finished(self):
-        pass
+        self.remove_finished_slices()
+        return len(self.incomplete_slices) == 0
+
 
 if __name__ == '__main__':
     main()
