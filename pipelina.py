@@ -1,0 +1,335 @@
+""" Revised zfish command script which should be more flexible for both suite2p
+    and ANTs jobs plus additional 'HPCJobs' that may be needed to process data
+"""
+from zfishcommand import FILESPERFISH
+import paramiko
+import os
+import time
+import datetime
+import logging
+import argparse
+import json
+import shutil
+
+# How long to wait before checking on running jobs
+WAITTIME = 6 * 60 * 60
+WAITTIME = 120
+# HPC ssh address to use
+HPCHOSTNAME='awoonga.qriscloud.org.au'
+# HPC user account to use, set as environment variable
+USERNAME=os.getenv('UQUSERNAME')
+
+
+
+def main():
+
+    ## Process input arguments
+    parser = argparse.ArgumentParser(description="Launch and monitor computational jobs on a remote server.")
+    parser.add_argument('-j', '--job-type', help='The type of HPC job to run', type=str, choices=['fish-whole', 'fish-slices'], default='fish-whole')
+    parser.add_argument('-s', '--s2p-config-json', help='Suite2p json config file', type=str)
+    parser.add_argument('-i', '--input-folder', help='Folder containing input data', type=str)
+    parser.add_argument('-o', '--output-folder', help='Folder where output should be saved', type=str)
+    parser.add_argument('name', help='A unique name identifying this set of jobs.', type=str)
+    args = parser.parse_args()
+
+    ## Initialise logging
+    logging.basicConfig(filename=f'{args.name}.log', level=logging.INFO)
+
+    ## Set up SSH connection
+    ssh = get_ssh_connection()
+
+    ## Create job objects based on input arguments
+    incomplete_jobs = []
+    if args.job_type == 'fish-whole':
+        print('Doing fish whole job')
+        ## Verify other args 
+        # TODO
+        logging.info('TODO : verify args')
+
+        ## Create an experiment specific copy of s2p_ops 
+        exp_s2p_filename = f'{args.name}_{os.path.basename(args.s2p_config_json)}'
+        shutil.copy2(args.s2p_config_json, exp_s2p_filename)
+
+        ## move to server
+        ftp_client = ssh.open_sftp()
+        ftp_client.put(exp_s2p_filename, exp_s2p_filename)
+        logging.info(f"Sent {exp_s2p_filename} to server.")
+
+        ## Create all jobs
+        incomplete_jobs = create_whole_fish_s2p_jobs(ssh, args.input_folder, args.output_folder, exp_s2p_filename)
+        
+    if args.job_type == 'fish-slices':
+        print('Not yet supported. Exiting')
+        raise NotImplementedError()
+
+
+    ## Main loop
+    while incomplete_jobs:
+
+        ## Get a list of currently running jobs
+        running_jobs = get_current_jobs(ssh)
+
+        finished_jobs = []
+        ## for each incomplete job
+        for job in incomplete_jobs:
+
+            ## if job is still running, skip for now
+            if job.get_latest_job_id() in running_jobs:
+                continue
+
+            # if not running and meets finished criteria, prepare to remove          
+            if job.is_finished():
+                finished_jobs.append(job)
+                continue
+
+            # else, not running and not finished, so restart
+            job.start_job()
+
+        ## remove finished jobs from incomplete jobs
+        [incomplete_jobs.remove(job) for job in finished_jobs]
+
+        ## Wait some time before checking again
+        time.sleep(WAITTIME)    
+
+
+def create_whole_fish_s2p_jobs(ssh, input_folder, output_folder, s2p_config_json):
+    """ Create suite2p whole fish jobs for the cluster given the ssh connection
+        and the command line arguments
+
+    Arguments:
+        ssh: The ssh connection to the server for jobs to run on
+        input_folder: Path to folder containing folders of fish
+        output_folder: Path to save folders of finished fish
+        s2p_config_json: Path to json file containing s2p attributes to use
+
+    Returns:
+        List of FullFishs2p jobs to be run on the server.
+    """
+    ## Get a list of all fish
+    ls_fish = f'ls {input_folder}'
+    all_fish = run_command(ssh, ls_fish)
+    # ls results end in \n, need to strip away
+    all_fish = [filename.strip() for filename in all_fish]
+    input_folder = os.path.normpath(input_folder)
+
+    # TODO : debugging, remove
+    all_fish = all_fish[:3]
+
+    fish_jobs = []
+    for fish_base_name in all_fish:
+        fish_abs_path = os.path.join(input_folder, fish_base_name)
+        fish_job = FullFishs2p(ssh, fish_abs_path, output_folder, s2p_config_json)
+        fish_jobs.append(fish_job)
+    
+    logging.info(f'Created several fish jobs: {fish_jobs}')
+    return fish_jobs
+
+def run_command(ssh, command):
+    """ Execute a given command on the remote server and return a list of lines
+
+    Arguments:
+        ssh: The ssh connection to the server for jobs to run on
+        command: the command to execute on the remote server
+
+    Returns:
+        List of strings of the output resulting from running the command
+    """
+    stdin, stdout, stderr = ssh.exec_command(command)
+    return stdout.readlines()    
+
+def get_current_jobs(ssh):
+    """ Given the ssh object return a list of all current jobs running 
+
+    Arguments:
+        ssh: The ssh connection to the server for jobs to run on
+
+    returns:
+        list of strings with the job id of all running jobs. Array jobs have 
+          the [] removed. 
+    """
+    stdin, stdout, stderr = ssh.exec_command('qstat')
+
+    running_jobs = []
+    for line in stdout.readlines():
+        job_id = parse_job_id(line)
+        if job_id:
+            running_jobs.append(job_id)
+    
+    return running_jobs
+
+def parse_job_id(line):
+    """ Parse a string returning job id or None if one cannot be found
+
+    Argument:
+        line: the string to parse
+
+    Returns:
+        A string of number representing a job id or None
+    """
+    if '.awon' in line:
+        return line.split('.awon')[0].strip('[]')
+    return None
+
+
+def get_ssh_connection():
+    """ Start a connection to HPC
+    
+    Returns:
+        SSH client to HPC cluster where jobs should be launched
+    """
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(HPCHOSTNAME, username=USERNAME)
+    return ssh
+
+
+
+class HPCJob:
+    """ An abstract class representing some computation to be run on a ssh
+        connection
+
+    Attributes:
+      job_ids: List of job ids that have been used
+      ssh: The ssh connection where jobs are being run
+    """
+    def __init__(self, ssh):
+        self.job_ids = []
+        self.ssh = ssh
+
+    def get_latest_job_id(self):
+        """ Return the job id of the latest job that was sent to the HPC
+        """
+        return self.job_ids[-1] if len(self.job_ids) else None
+
+    def start_job(self):
+        """ Launch a job through the ssh connection attribute
+        """
+        raise NotImplementedError
+
+    def is_finished(self):
+        """ Returns True iff the stopping criteria for this job are met
+        """
+        raise NotImplementedError
+    
+    def __str__(self):
+        return f'HPCJob({self.job_ids})'
+
+    def __repr__(self):
+        return str(self)
+
+
+class FullFishs2p(HPCJob):
+    """ Run a full fish through suite2p using arguments from specified config 
+        file 
+    """
+
+    ## Each fish should produce 7 output files + a plane folder per plane
+    ## F.npy, iscell.npy, Fneu.npy, spks.npy, ops.npy, stat.npy, Fall.npy, plane0
+    ## so number planes * 8 is how big this should be per fish.
+    FILESPERFISH = 8
+
+    def __init__(self, ssh, fish_abs_path, output_folder, s2p_config_json):
+        """ 
+        Args:
+            ssh: An open ssh connection
+            input_folder: Absolute path to folder containing one or more .tif 
+              files
+            output_folder: Absolute path where results from suite2p should be
+              saved. Each fish will create its own directory at this path.
+            s2p_config_json: A json config file containing suite2p options
+        """
+        super().__init__(ssh)
+        self.fish_abs_path = fish_abs_path
+        self.output_folder = output_folder
+        self.s2p_config_json = s2p_config_json
+
+        # Load data from s2p_config_json for use (e.g. nplanes to calc num files)
+        with open(self.s2p_config_json, 'r') as fp:
+            try:
+                self.s2p_ops = json.loads(fp.read())
+            except:
+                logging.warning(f'Failed to read s2p config file: {self.s2p_config_json}')
+
+    def start_job(self):
+        launch_job = f'python ~/pipelina/revised_HPC_run_fish.py {self.fish_abs_path} {self.output_folder} {self.s2p_config_json}'
+        logging.info(f'ssh exec: {launch_job}')
+
+        # actually launch job
+        stdin, stdout, stderr = self.ssh.exec_command(launch_job)
+
+        # Did launching the job cause error output
+        any_errors = stderr.readlines()
+        if any_errors:
+            logging.warning(f'Error when starting fish: {any_errors}')
+            return None
+        
+        # Try to parse job id
+        output = stdout.readlines()[0]
+        job_id = parse_job_id(output)
+
+        ## Failed parse job id
+        if not job_id:
+            logging.warning(f'Failed to get job id.')
+            return None
+
+        self.job_ids.append(job_id)
+        logging.info(f'Successfully launched: {self}')
+        return job_id
+
+    def is_finished(self):
+        """ Check if a fish has finished all processing
+
+        Checking if a fish has finished all processing will just entail
+        checking if the correct number of files exist in the output folder this
+        could be augmented with additional file size checks or Num of ROIs 
+        later.
+
+        Returns:
+            Whether the fish is finished or not.
+        """
+        find_command = f'find {self.fish_abs_path}'
+        logging.info(f'ssh exec: {find_command}')
+
+        stdin, stdout, stderr = self.ssh.exec_command(find_command)
+        find_result = stdout.readlines()
+
+        num_files_found = len(find_result)
+
+        nplanes = self.s2p_ops.get('nplanes')
+        assert nplanes is not None, f"nplanes not found in config file: {self.s2p_config_json}"
+        total_files_expected = (nplanes * self.FILESPERFISH) + 1 # +1 for the original directory
+
+        logging.info(f'For fish found: {num_files_found} files, Of {total_files_expected} expected')
+        return total_files_expected == num_files_found
+
+    def __repr__(self):
+        return f'FullFishs2p({self.fish_abs_path}, {self.output_folder}, {self.s2p_config_json})'
+
+
+class SlicedFishs2p(HPCJob):
+    """ Run a sliced fish through suite2p using arguments from specified config
+        file 
+    """
+    def __init__(self, ssh, slice_folder, output_folder, s2p_config_json):
+        """ 
+        Args:
+            ssh: An open ssh connection
+            slice_folder: Absolute path to folder containing folders of sliced
+              fish
+            output_folder: Absolute path where results from suite2p should be
+              saved. Each slice will create its own directory at this path.
+            s2p_config_json: A json config json containing suite2p options
+        """
+        super().__init__(ssh)
+        self.slice_folder = slice_folder
+        self.output_folder = output_folder
+        self.s2p_config_json = s2p_config_json
+
+    def start_job(self):
+        pass
+
+    def is_finished(self):
+        pass
+
+if __name__ == '__main__':
+    main()
