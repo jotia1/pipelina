@@ -6,6 +6,9 @@ Pipelina is a pipeline for automating as many steps as possible in processing ca
 ## Get Josh to add you the command server
 The pipeline is controlled by an external server (the command server) which launches jobs on Awoonga and periodically checks on them. To access the server you will need to be added, give your uq staff id (or student number) to Josh who will add you.
 
+## Get an Awoonga account
+Follow instructions here [https://rcc.uq.edu.au/awoonga](https://rcc.uq.edu.au/awoonga). You may be required to undergo HPC training run by RCC, see [https://rcc.uq.edu.au/training](https://rcc.uq.edu.au/training).
+
 ## Set up pipelina on Awoonga
 Now we will need to set up pipelina on Awoonga. First log into Awoonga using PuTTY, into the field asking for Host name type the address:
 ```
@@ -32,7 +35,8 @@ echo $UQSCHOOL
 These should print your correct username and school string.
 
 ### Install miniconda
-**NOTE**: Skip miniconda installation for now, instead just try `module load anaconda` # TODO : Check what is best for conda on awoonga.
+**NOTE**: Skip miniconda installation for now, I think we may be able to use the awoonga pre-installed anaconda environment but I will need a fresh user account to test this (the next step contains what I **think** will work i.e. `module load anaconda` which should save us having to install our own copy. 
+
 Anaconda is helpful for managing Python enviroments and packages, we will install Miniconda which is a barebones version. While still logged into Awoonga over ssh (through PuTTY) enter the following commands one by one, when prompted agree to the terms, conditions and installation location:
 ```
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
@@ -47,9 +51,10 @@ We will need to download the code for [Suite2p](https://github.com/MouseLand/sui
 cd ~/
 git clone https://github.com/MouseLand/suite2p.git
 ```
-Now lets go into the Suite2p folder and actually set up the Anaconda environment
+Now lets go into the Suite2p folder and actually set up the Anaconda environment, agree to the installation instructions and default locations
 ```
 cd suite2p
+module load anaconda
 conda env create -f environment.yml
 ```
 To Activate and use the suite2p environment you can use the command
@@ -89,7 +94,7 @@ ssh-copy-id ${UQUSERNAME}@awoonga.qriscloud.org.au
 ```
 
 ## Launch a job
-Log into the command server through ssh (using PuTTY), the hostname is (`uqjarno4-zfish.zones.eait.uq.edu.au`) 
+The previous steps only need to be completed once to initially set up pipelina. Once set up to use pipeline log into the command server through ssh (using PuTTY), the hostname is (`uqjarno4-zfish.zones.eait.uq.edu.au`) 
 
 Change into the pipelina directory 
 ```
@@ -98,11 +103,11 @@ cd pipelina
 
 You will need a few bits of information before you can run pipelina: 
 - `JOBNAME="descriptive-name"` - A short descriptive name for the job, can be anything but its important it is unique to any other running jobs e.g. `fish8-11Spont`
-- `INPUTFOLDER="/path/to/folder/with/multiple/fish"` - The folder in which the fish folders to process are
-- `OUTPUTFOLDER="path/where/s2p/output/should/save"` - The folder in which the finished fish will be saved
+- `INPUTFOLDER="/path/to/folder/with/multiple/fish/folders"` - The folder in which the fish folders to process are
+- `OUTPUTFOLDER="/path/where/s2p/output/should/save"` - The folder in which the finished fish will be saved
 - `FPS="2"` - The frame rate used in the recording
 - `NPLANES="50"` - The number of planes used
-- `GCAMPTYPE="gcamp6f"` - The gcamp version used, must be one of [gcamp6s, gcamp6f]
+- `GCAMPTYPE="gcamp6f"` - The gcamp version used, must be one of [gcamp6s, gcamp6f] using tau values of 1.4 and 0.7 respectively.
 
 You can set all of these values in the file called `run_zfishcommand.sh`. To open the file we can use the nano text editor, when you are done you can save by pressng Ctrl+o and then enter. To exit press Ctrl+x.
 ```
@@ -124,7 +129,7 @@ To check the logs (which tell us what the program is doing / did) we need to kno
 ```
 cat descriptive-name.log
 ``` 
-which will just paste the whole log to the screen, alternatively you could use `nano` to open the file directly or filezilla to copy the log onto your own local computer and then open it with any text editor.
+which will just paste the whole log to the screen, alternatively you could use `nano` to open the file directly or filezilla to copy the log onto your own local computer and then open it with any text editor. Similarly, for each job launched a `descriptive-name.txt` file is also created which has a record the information used to launch the job (the input folder, fps, nplanes, etc.). 
 
 
 
