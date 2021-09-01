@@ -24,10 +24,10 @@ users_school = os.getenv('UQSCHOOL')
 
 ## Build pbs script 
 file_contents = f"""#!/bin/bash
-#PBS -N fish{fish_num}
+#PBS -N pplna{fish_num}
 #PBS -A {users_school}
-#PBS -l select=1:ncpus=1:mem=2GB:vmem=2GB
-#PBS -l walltime=00:10:00
+#PBS -l select=1:ncpus=12:mem=110GB:vmem=110GB
+#PBS -l walltime=24:00:00
 #PBS -j oe
 #PBS -k doe
 #PBS -m abe
@@ -42,12 +42,12 @@ for fish_tif in `ls {fish_folder}/*.tif`; do
 done
 
 echo revised_run_fish.py {fish_folder} {output_folder} {args.s2p_config_json}
-python ~/pipelina/revised_run_fish.py {fish_folder} {output_folder} {args.s2p_config_json}
+python ~/pipelina/pipelina_run_fish.py {fish_folder} {output_folder} {args.s2p_config_json}
 """
 
 
 ## Write pbs script to disk
-pbs_filename = 'revised_HPC_run_fish.pbs'
+pbs_filename = 'pipelina_HPC_run_fish.pbs'
 with open(pbs_filename, 'w') as fp:
     fp.write(file_contents)
 
