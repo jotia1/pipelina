@@ -28,6 +28,7 @@ def main():
     parser.add_argument('-s', '--s2p-config-json', help='Suite2p json config file', type=str)
     parser.add_argument('-i', '--input-folder', help='Folder containing input data', type=str)
     parser.add_argument('-o', '--output-folder', help='Folder where output should be saved', type=str)
+    parser.add_argument('-a', '--array-id', help='Job ID of a currently running array to watch - for slice arrays only', type=str)
     parser.add_argument('name', help='A unique name identifying this set of jobs.', type=str)
     args = parser.parse_args()
 
@@ -53,8 +54,12 @@ def main():
         
     if args.job_type == 'fish-slices':
         # Send s2p args to server and get the filename used
+        logging.info('Starting a fish-slices job')
         exp_s2p_filename = transfer_s2p_args(ssh, args.name, args.s2p_config_json)
         incomplete_jobs = [SlicedFishs2p(ssh, args.input_folder, args.output_folder, exp_s2p_filename, args.name)]
+        if args.array_id:
+            logging.info(f'Using passed in job_id: {args.array_id}')
+            incomplete_jobs[0].job_ids.append(args.array_id)
 
     ## Main loop
     while incomplete_jobs:
