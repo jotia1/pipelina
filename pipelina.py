@@ -13,7 +13,6 @@ import datetime
 
 # How long to wait before checking on running jobs
 WAITTIME = 6 * 60 * 60
-#WAITTIME = 120
 # HPC ssh address to use
 HPCHOSTNAME='awoonga.qriscloud.org.au'
 # HPC user account to use, set as environment variable
@@ -355,13 +354,13 @@ class SlicedFishs2p(HPCJob):
         logging.info(f'ssh exec: {find_command}')
         stdin, stdout, stderr = self.ssh.exec_command(find_command)
         find_result = stdout.readlines()
-        logging.debug(f'find_result: {find_result}')
+        #logging.info(f'find_result: {find_result}')
 
         ## Count how many files exist for each slice
         counts = [0 for _ in range(len(self.incomplete_slices))]
         for filename in find_result:
             for i, slice in enumerate(self.incomplete_slices):
-                if slice in filename:
+                if os.path.basename(slice) in filename:
                     counts[i] += 1
                     break
 
