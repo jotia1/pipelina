@@ -62,6 +62,8 @@ To Activate and use the suite2p environment you can use the command
 conda activate suite2p
 ```
 
+## TODO Will need to write a section on modifying s2p to skip planes
+
 ### Download pipelina
 To install pipelina on Awoonga we will first need to go back to the home directory and then download pipelinas code
 ```
