@@ -24,7 +24,7 @@ def main():
 
     ## Process input arguments
     parser = argparse.ArgumentParser(description="Launch and monitor computational jobs on a remote server.")
-    parser.add_argument('-j', '--job-type', help='The type of HPC job to run', type=str, choices=['fish-whole', 'fish-slices'], default='fish-whole')
+    parser.add_argument('-j', '--job-type', help='The type of HPC job to run', type=str, choices=['fish-whole', 'fish-slices', 'slice-whole'], default='fish-whole')
     parser.add_argument('-s', '--s2p-config-json', help='Suite2p json config file', type=str)
     parser.add_argument('-i', '--input-folder', help='Folder containing input data', type=str)
     parser.add_argument('-o', '--output-folder', help='Folder where output should be saved', type=str)
@@ -34,6 +34,9 @@ def main():
 
     ## Initialise logging
     logging.basicConfig(filename=f'{args.name}.log', level=logging.INFO)
+    logging.info('-' * 60)
+    logging.info(f'{datetime.datetime.now()}                   Launch Pipelina')
+    logging.info('-' * 60)
 
     ## Set up SSH connection
     ssh = get_ssh_connection()
@@ -60,6 +63,11 @@ def main():
         if args.array_id:
             logging.info(f'Using passed in job_id: {args.array_id}')
             incomplete_jobs[0].job_ids.append(args.array_id)
+    
+    if args.job_type == 'slice-whole':
+        print('Doing slice-whole (will reslice fish then process)')
+        
+
 
     ## Main loop
     while incomplete_jobs:
@@ -125,7 +133,7 @@ def create_whole_fish_s2p_jobs(ssh, input_folder, output_folder, s2p_config_json
     input_folder = os.path.normpath(input_folder)
 
     # TODO : hack to only process some of q2396 fish (just grab some)
-    all_fish = all_fish[18:25]
+    # all_fish = all_fish[18:25]
 
     fish_jobs = []
     for fish_base_name in all_fish:
@@ -135,6 +143,36 @@ def create_whole_fish_s2p_jobs(ssh, input_folder, output_folder, s2p_config_json
     
     logging.info(f'Created several fish jobs: {fish_jobs}')
     return fish_jobs
+
+
+def create_slice_whole_jobs(ssh, base_input_folder, output_folder):
+    """ Given a folder with multiple fish create a list of SliceFish objects to
+        slice the fish ready for s2p.
+
+    Arguments:
+        ssh: The ssh connection to the server for jobs to run on
+        input_folder: Path to folder containing folders of fish
+        output_folder: Path to save folders of sliced fish
+
+    Returns:
+        List of SliceFish jobs to be run on the server.
+    """
+    ## Get a list of all fish
+    ls_fish = f'ls {base_input_folder}'
+    all_fish = run_command(ssh, ls_fish)
+    # ls results end in \n, need to strip away
+    all_fish = [filename.strip() for filename in all_fish]
+    input_folder = os.path.normpath(base_input_folder)
+
+    slice_jobs = []
+    for slice_base_name in all_fish:
+        slice_abs_path = os.path.join(base_input_folder, slice_base_name)
+        #fish_job = FullFishs2p(ssh, slice_abs_path, output_folder, s2p_config_json)
+        slice_job = SliceFish(ssh, slice_abs_path, output_folder)
+        slice_jobs.append(slice_job)
+    
+    logging.info(f'Created several SliceFish jobs: {slice_jobs}')
+    return slice_jobs
 
 def run_command(ssh, command):
     """ Execute a given command on the remote server and return a list of lines
@@ -323,8 +361,8 @@ class SlicedFishs2p(HPCJob):
     """ Run a sliced fish through suite2p using arguments from specified config
         file 
     """
-    FILESPERSLICE = 8
-    def __init__(self, ssh, slice_folder, output_folder, s2p_config_json, exp_name):
+    FILESPERSLICE = 9
+    def __init__(self, ssh, slice_folder, base_output_folder, s2p_config_json, exp_name):
         """ 
         Args:
             ssh: An open ssh connection
@@ -336,7 +374,7 @@ class SlicedFishs2p(HPCJob):
         """
         super().__init__(ssh)
         self.slice_folder = slice_folder
-        self.output_folder = output_folder
+        self.base_output_folder = base_output_folder
         self.s2p_config_json = s2p_config_json
         self.exp_name = exp_name
 
@@ -349,14 +387,16 @@ class SlicedFishs2p(HPCJob):
         self.all_slices = [filename.strip() for filename in self.all_slices]
         # Make paths absolute
         self.all_slices = [os.path.join(self.slice_folder, slice_name) for slice_name in self.all_slices]
+        # Incomplete slices is a list of absolute paths to the tif files
+        # and ends in .tif
         self.incomplete_slices = self.all_slices.copy()
 
         self.remove_finished_slices()
 
     def remove_finished_slices(self):
         logging.info('remove_finished_slices')
-        # use the find command to get all files in output_folder
-        find_command = f'find {self.output_folder}'
+        # use the find command to get all folders in base_output_folder
+        find_command = f'find {self.base_output_folder}'
         logging.info(f'ssh exec: {find_command}')
         stdin, stdout, stderr = self.ssh.exec_command(find_command)
         find_result = stdout.readlines()
@@ -365,7 +405,9 @@ class SlicedFishs2p(HPCJob):
         ## Count how many files exist for each slice
         counts = [0 for _ in range(len(self.incomplete_slices))]
         for filename in find_result:
+            #logging.info(f'filename: {filename}')
             for i, slice in enumerate(self.incomplete_slices):
+                #logging.info(f'      slice: {slice}')
                 if os.path.basename(slice) in filename:
                     counts[i] += 1
                     break
@@ -398,7 +440,7 @@ class SlicedFishs2p(HPCJob):
         ftp_client.put(incomplete_slices_filename, incomplete_slices_filename)
 
         ## Launch and check array
-        launch_job = f'python ~/pipelina/pipelina_HPC_run_slice.py {incomplete_slices_filename} {self.output_folder} {self.s2p_config_json}'
+        launch_job = f'python ~/pipelina/pipelina_HPC_run_slice.py {incomplete_slices_filename} {self.base_output_folder} {self.s2p_config_json}'
         logging.info(f'ssh exec: {launch_job}')
         # Actually send job to awoonga
         stdin, stdout, stderr = self.ssh.exec_command(launch_job)
@@ -425,6 +467,44 @@ class SlicedFishs2p(HPCJob):
     def is_finished(self):
         self.remove_finished_slices()
         return len(self.incomplete_slices) == 0
+
+
+class SliceFish(HPCJob):
+    def __init__(self, ssh, slice_input_folder, base_output_folder, exp_name):
+        raise NotImplementedError('Lots more work needed.')
+        super().__init__(ssh)
+        self.slice_input_folder = slice_input_folder
+        self.base_output_folder = base_output_folder
+        self.exp_name = exp_name
+
+    def start_job(self):
+        launch_job = f'python ~/pipelina/pipelina_HPC_run_slice_fish.py {self.slice_input_folder} {self.base_output_folder}'
+        logging.info(f'ssh exec: {launch_job}')
+
+        # actually launch job
+        stdin, stdout, stderr = self.ssh.exec_command(launch_job)
+
+        # Did launching the job cause error output
+        any_errors = stderr.readlines()
+        if any_errors:
+            logging.warning(f'Error when starting SliceFish: {any_errors}')
+            return None
+        
+        # Try to parse job id
+        output = stdout.readlines()[0]
+        job_id = parse_job_id(output)
+
+        ## Failed parse job id
+        if not job_id:
+            logging.warning(f'Failed to get job id.')
+            return None
+
+        self.job_ids.append(job_id)
+        logging.info(f'Successfully launched: {self}')
+        return job_id
+
+    def is_finished(self):
+        raise NotImplementedError()
 
 
 if __name__ == '__main__':
