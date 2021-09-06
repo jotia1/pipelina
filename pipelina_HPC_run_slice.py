@@ -27,16 +27,27 @@ users_school = os.getenv('UQSCHOOL') #'UQ-EAIT-ITEE' # likely UQ-QBI or UQ-SCI-S
 with open(slices_filename, 'r') as f:
     num_files = len(f.readlines())
 
+array_size = num_files
+if num_files == 1:
+    array_size = 2 # pbs will error if only 1 item in array
+
 ## Build pbs script 
 file_contents = f"""#!/bin/bash
 #PBS -N {expname}
 #PBS -A {users_school}
-#PBS -l select=1:ncpus=12:mem=110GB:vmem=110GB
-#PBS -l walltime=00:05:00
+#PBS -l select=1:ncpus=12:mem=75GB:vmem=75GB
+#PBS -l walltime=05:00:00
 #PBS -j oe
 #PBS -k doe
-#PBS -J 1-{num_files}
+#PBS -J 1-{array_size}
 
+# Deal with only 1 slice left to do case
+if [ {num_files} -eq 1 ]; then
+    if [ {array_size} -eq ${{PBS_ARRAY_INDEX}} ]; then
+        echo "This is the fake job to allow array, exiting."
+        exit
+    fi
+fi
 
 module load anaconda
 source activate suite2p
