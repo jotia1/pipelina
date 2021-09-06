@@ -240,7 +240,7 @@ class FullFishs2p(HPCJob):
     ## so number planes * 8 is how big this should be per fish.
     FILESPERFISH = 8
 
-    def __init__(self, ssh, fish_abs_path, output_folder, s2p_config_json):
+    def __init__(self, ssh, fish_abs_path, base_output_folder, s2p_config_json):
         """ 
         Args:
             ssh: An open ssh connection
@@ -252,7 +252,8 @@ class FullFishs2p(HPCJob):
         """
         super().__init__(ssh)
         self.fish_abs_path = fish_abs_path
-        self.output_folder = output_folder
+        self.base_output_folder = base_output_folder
+        self.fish_output_folder = os.path.join(base_output_folder, 'suite2p_' + os.path.basename(fish_abs_path))
         self.s2p_config_json = s2p_config_json
 
         # Load data from s2p_config_json for use (e.g. nplanes to calc num files)
@@ -263,7 +264,7 @@ class FullFishs2p(HPCJob):
                 logging.warning(f'Failed to read s2p config file: {self.s2p_config_json}')
 
     def start_job(self):
-        launch_job = f'python ~/pipelina/pipelina_HPC_run_fish.py {self.fish_abs_path} {self.output_folder} {self.s2p_config_json}'
+        launch_job = f'python ~/pipelina/pipelina_HPC_run_fish.py {self.fish_abs_path} {self.fish_output_folder} {self.s2p_config_json}'
         logging.info(f'ssh exec: {launch_job}')
 
         # actually launch job
@@ -299,7 +300,7 @@ class FullFishs2p(HPCJob):
         Returns:
             Whether the fish is finished or not.
         """
-        find_command = f'find {self.fish_abs_path}'
+        find_command = f'find {self.fish_output_folder}'
         logging.info(f'ssh exec: {find_command}')
 
         stdin, stdout, stderr = self.ssh.exec_command(find_command)
@@ -315,7 +316,7 @@ class FullFishs2p(HPCJob):
         return total_files_expected == num_files_found
 
     def __repr__(self):
-        return f'FullFishs2p({self.fish_abs_path}, {self.output_folder}, {self.s2p_config_json})'
+        return f'FullFishs2p({self.fish_abs_path}, {self.fish_output_folder}, {self.s2p_config_json})'
 
 
 class SlicedFishs2p(HPCJob):

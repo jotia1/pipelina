@@ -11,12 +11,12 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('fish_abs_path', help="Absolute path to the directory with .tif files")
-parser.add_argument('output_directory', help="Path where output fish folders should be placed")
+parser.add_argument('output_directory', help="Absolute path to this fish's individual output folder")
 parser.add_argument('s2p_config_json', help="Path to a json file containing ops for suite2p")
 args = parser.parse_args()
 
 fish_folder = os.path.normpath(args.fish_abs_path)
-output_folder = os.path.normpath(args.output_directory)
+fish_output_folder = os.path.normpath(args.output_directory)
 fish_num = os.path.basename(fish_folder).split('fish')[1].split('_')[0]
 
 ## Define variables needed for file
@@ -41,8 +41,8 @@ for fish_tif in `ls {fish_folder}/*.tif`; do
     /usr/local/bin/recall_medici $fish_tif
 done
 
-echo revised_run_fish.py {fish_folder} {output_folder} {args.s2p_config_json}
-python ~/pipelina/pipelina_run_fish.py {fish_folder} {output_folder} {args.s2p_config_json}
+echo pipelina_run_fish.py {fish_folder} {fish_output_folder} {args.s2p_config_json}
+python ~/pipelina/pipelina_run_fish.py {fish_folder} {fish_output_folder} {args.s2p_config_json}
 """
 
 
